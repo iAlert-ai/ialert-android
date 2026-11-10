@@ -151,7 +151,7 @@ class IAlertTest {
         assertTrue(Regex("^ia_android_[0-9a-f-]{36}$").matches(body.getString("push_token")))
         assertEquals("user-42", body.getString("external_user_id"))
         assertEquals("gold", body.getJSONObject("tags").getString("plan"))
-        assertEquals("0.1.0", body.getString("sdk_version"))
+        assertEquals("0.2.0", body.getString("sdk_version"))
         assertEquals(body.getString("push_token"), transport.requests[1].body!!.getString("push_token"))
     }
 
@@ -316,5 +316,78 @@ class IAlertTest {
         assertEquals(2, sockets.sockets.size)
         assertNull(ialert.deviceId)
         assertEquals(ConnectionState.CLOSED, states.last())
+    }
+
+    @Test
+    fun `joins and leaves a live activity channel with its device token`() {
+        val transport = FakeTransport(registerResponder, { request ->
+            if ("/live-activity-channels/" in request.url) 200 to JSONObject().put("subscribed", request.method == "POST") else null
+        })
+        val ialert = sdk(transport, autoConnect = false)
+
+        blocking { ialert.register(pushToken = "fcm-token-1") }
+        blocking { ialert.subscribeLiveActivity("01J0CHANNEL") }
+        blocking { ialert.unsubscribeLiveActivity("01J0CHANNEL") }
+
+        val (join, leave) = transport.requests.drop(1)
+        assertEquals("POST", join.method)
+        assertEquals("https://api.test/api/v1/devices/dev_1/live-activity-channels/01J0CHANNEL", join.url)
+        assertEquals("ia_dt_dev_1.sig", join.headers["X-Device-Token"])
+        assertEquals("DELETE", leave.method)
+        assertEquals(join.url, leave.url)
+    }
+
+    @Test
+    fun `live activity subscription needs a registration and reports api errors`() {
+        val transport = FakeTransport(registerResponder, { request ->
+            if ("/live-activity-channels/" in request.url) 422 to JSONObject().put("message", "Register with the FCM token.").put("code", "push_token_required") else null
+        })
+        val ialert = sdk(transport, autoConnect = false)
+
+        assertEquals("not_registered", assertFailsWith<IAlertException> { blocking { ialert.subscribeLiveActivity("c") } }.code)
+
+        blocking { ialert.register() }
+        val error = assertFailsWith<IAlertException> { blocking { ialert.subscribeLiveActivity("c") } }
+        assertEquals("push_token_required", error.code)
+        assertEquals(422, error.status)
+    }
+
+    @Test
+    fun `reads live activity updates from fcm data and ignores other messages`() {
+        val update = LiveActivityUpdate.from(mapOf(
+            "ialert_type" to "live_activity",
+            "ialert_channel" to "01J0CHANNEL",
+            "ialert_broadcast" to "01J0BROADCAST",
+            "event" to "update",
+            "timestamp" to "1700000000",
+            "content_state" to "{\"home\":2,\"away\":1}",
+            "title" to "Goal!",
+            "relevance_score" to "0.5",
+        ))!!
+
+        assertEquals("01J0CHANNEL", update.channelId)
+        assertEquals(LiveActivityUpdate.Event.UPDATE, update.event)
+        assertEquals(2, update.contentState.getInt("home"))
+        assertEquals("Goal!", update.title)
+        assertEquals(1_700_000_000L, update.timestamp)
+        assertEquals(0.5, update.relevanceScore)
+        assertEquals("01J0CHANNEL".hashCode(), update.notificationId)
+        assertTrue(!update.isEnd)
+
+        assertTrue(LiveActivityUpdate.from(mapOf("ialert_type" to "live_activity", "ialert_channel" to "c", "event" to "end"))!!.isEnd)
+        assertNull(LiveActivityUpdate.from(mapOf("ialert_id" to "01J0NOTIFICATION")))
+        assertNull(LiveActivityUpdate.from(mapOf("ialert_type" to "live_activity", "ialert_channel" to "c", "event" to "start")))
+    }
+
+    @Test
+    fun `an unknown channel does not cost the device its registration`() {
+        val transport = FakeTransport(registerResponder)
+        val ialert = sdk(transport, autoConnect = false)
+
+        blocking { ialert.register(pushToken = "fcm-token-1") }
+        val error = assertFailsWith<IAlertException> { blocking { ialert.subscribeLiveActivity("missing") } }
+
+        assertEquals(404, error.status)
+        assertEquals("dev_1", ialert.deviceId)
     }
 }

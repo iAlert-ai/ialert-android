@@ -53,6 +53,11 @@ internal class ApiClient(baseUrl: String, private val publicKey: String, private
         }
     }
 
+    /** Join or leave a Live Activity channel (its FCM topic); the device must be registered with its FCM token. */
+    suspend fun liveActivity(deviceId: String, deviceToken: String, channelId: String, subscribe: Boolean) {
+        request(if (subscribe) "POST" else "DELETE", "/devices/${escape(deviceId)}/live-activity-channels/${escape(channelId)}", null, deviceToken)
+    }
+
     private suspend fun request(method: String, pathOrUrl: String, body: JSONObject?, deviceToken: String? = null): JSONObject {
         val headers = buildMap {
             put("Accept", "application/json")

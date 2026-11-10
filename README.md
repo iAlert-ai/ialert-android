@@ -20,7 +20,7 @@ dependencyResolutionManagement {
 Then the dependency in your app module:
 
 ```kotlin
-implementation("com.github.iAlert-ai:ialert-android:v0.1.0")
+implementation("com.github.iAlert-ai:ialert-android:v0.2.0")
 ```
 
 ## Usage
@@ -51,9 +51,42 @@ lifecycleScope.launch {
 - `delivered` is acked automatically (`autoAckDelivered = false` turns it off). Report `READ` / `CLICKED` yourself. Acks go over the socket when it is ready, otherwise over HTTP.
 - `IAlert.Config` lets you inject `transport`, `webSocketFactory`, `scheduler`, `apiUrl`, `gatewayUrl`, `autoConnect` and the ping/reconnect timings.
 
+## Live Activity broadcasts
+
+One push from your server updates an ongoing notification on every subscribed device (scores, deliveries, flights). Your server creates the channel with `POST /v1/live-activity-channels` and gives its `id` to the app.
+
+Android delivers these through FCM topics, so register with the device's FCM token, then join the channel:
+
+```kotlin
+ialert.register(pushToken = fcmToken)
+ialert.subscribeLiveActivity(channelId)   // and ialert.unsubscribeLiveActivity(channelId)
+```
+
+Subscribe again whenever FCM gives the app a new token. Each broadcast arrives as an FCM data message; `LiveActivityUpdate.from` reads it (it returns `null` for any other message):
+
+```kotlin
+class PushService : FirebaseMessagingService() {
+    override fun onMessageReceived(message: RemoteMessage) {
+        val update = LiveActivityUpdate.from(message.data) ?: return
+        val manager = NotificationManagerCompat.from(this)
+        if (update.isEnd) { manager.cancel(update.notificationId); return }
+        val notification = NotificationCompat.Builder(this, "live_updates")
+            .setSmallIcon(R.drawable.ic_live)
+            .setContentTitle(update.title ?: "Live")
+            .setContentText(update.body ?: update.contentState.toString())
+            .setOngoing(true)
+            .setOnlyAlertOnce(true)
+            .build()
+        manager.notify(update.notificationId, notification) // same id: updated in place
+    }
+}
+```
+
+On Android 16 you can also ask for the notification to be promoted to a Live Update (see Android's "Live Updates" guide).
+
 ## Next step: native push
 
-0.1.0 delivers only while the app runs. Next comes FCM integration: a `FirebaseMessagingService` that passes `onNewToken` to `register(pushToken = …)`, and dedupe of FCM data messages by their `ialert_id` against Gateway/Inbox messages. An Android-library (AAR) wrapper with a SharedPreferences storage built in also belongs to that step.
+Regular notifications still arrive only while the app runs. Next comes FCM integration: a `FirebaseMessagingService` that passes `onNewToken` to `register(pushToken = …)`, and dedupe of FCM data messages by their `ialert_id` against Gateway/Inbox messages. An Android-library (AAR) wrapper with a SharedPreferences storage built in also belongs to that step.
 
 ## Development
 

@@ -115,6 +115,22 @@ public class IAlert(private val config: Config) {
         return withToken { api.unsubscribe(registration.deviceId, registration.deviceToken) }
     }
 
+    /**
+     * Join a Live Activity channel so its broadcasts reach this device as FCM data
+     * messages (read them with [LiveActivityUpdate.from]). The device must be
+     * registered with its FCM token as `pushToken`; subscribe again after the token changes.
+     */
+    public suspend fun subscribeLiveActivity(channelId: String) {
+        val registration = requireRegistration()
+        withToken(forgetOnNotFound = false) { api.liveActivity(registration.deviceId, registration.deviceToken, channelId, subscribe = true) }
+    }
+
+    /** Leave a Live Activity channel. */
+    public suspend fun unsubscribeLiveActivity(channelId: String) {
+        val registration = requireRegistration()
+        withToken(forgetOnNotFound = false) { api.liveActivity(registration.deviceId, registration.deviceToken, channelId, subscribe = false) }
+    }
+
     /** Open the Gateway socket (done by [register] unless `autoConnect` is off). */
     public fun connect() {
         val registration = requireRegistration()
@@ -239,12 +255,15 @@ public class IAlert(private val config: Config) {
         write("registration", null)
     }
 
-    /** A rejected device token means the device was deleted or unsubscribed elsewhere. */
-    private suspend fun <T> withToken(call: suspend () -> T): T {
+    /**
+     * A rejected device token means the device was deleted or unsubscribed elsewhere.
+     * A 404 means the same, except where the path also names another resource (a channel).
+     */
+    private suspend fun <T> withToken(forgetOnNotFound: Boolean = true, call: suspend () -> T): T {
         try {
             return call()
         } catch (e: IAlertException) {
-            if (e.code == "device_token_invalid" || e.status == 404) {
+            if (e.code == "device_token_invalid" || (forgetOnNotFound && e.status == 404)) {
                 disconnect()
                 forget()
             }
@@ -267,7 +286,7 @@ public class IAlert(private val config: Config) {
     }
 
     public companion object {
-        public const val SDK_VERSION: String = "0.1.0"
+        public const val SDK_VERSION: String = "0.2.0"
         private const val SEEN_LIMIT = 500
         private val TAG_KEY = Regex("^[A-Za-z0-9_.:-]{1,64}$")
 

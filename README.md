@@ -2,7 +2,28 @@
 
 iAlert SDK for Android, in Kotlin, with OkHttp as its only dependency; it uses `org.json` from the Android platform. It registers the app as an `android` device and receives notifications while the app runs, over iAlert's own channel: a WebSocket to the iAlert Gateway, plus the device Inbox for anything sent while the app was closed. Each notification reaches your listeners once, across both channels and restarts.
 
-The library is a plain Kotlin/JVM module: it reads `android.os.Build` by reflection, so it builds and tests without the Android SDK. Add it to your app as a normal dependency (`ir.ialert:ialert-android:0.1.0`, once published).
+The library is a plain Kotlin/JVM module: it reads `android.os.Build` by reflection, so it builds and tests without the Android SDK.
+
+## Install
+
+Add JitPack to `settings.gradle.kts`:
+
+```kotlin
+dependencyResolutionManagement {
+    repositories {
+        mavenCentral()
+        maven("https://jitpack.io")
+    }
+}
+```
+
+Then the dependency in your app module:
+
+```kotlin
+implementation("com.github.iAlert-ai:ialert-android:v0.1.0")
+```
+
+## Usage
 
 ```kotlin
 class PrefsStorage(context: Context) : KeyValueStorage {

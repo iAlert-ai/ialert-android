@@ -188,7 +188,9 @@ public class IAlert(private val config: Config) {
             val received = entries.asReversed().map(::fromInbox).filter { receive(it, ack = false) }
 
             if (config.autoAckDelivered) {
-                runCatching { ack(entries.filter { it.deliveredAt == null }.map { it.id }, AckEvent.DELIVERED) }
+                // Pushed entries stay unacknowledged: if FCM never brought them (an outage), the
+        // server can stop calling them pushed and a later sync shows them.
+        runCatching { ack(entries.filter { it.deliveredAt == null && !it.pushed }.map { it.id }, AckEvent.DELIVERED) }
             }
 
             return received
@@ -266,7 +268,9 @@ public class IAlert(private val config: Config) {
             }
         }
 
-        runCatching { ack(entries.filter { it.deliveredAt == null }.map { it.id }, AckEvent.DELIVERED) }
+        // Pushed entries stay unacknowledged: if FCM never brought them (an outage), the
+        // server can stop calling them pushed and a later sync shows them.
+        runCatching { ack(entries.filter { it.deliveredAt == null && !it.pushed }.map { it.id }, AckEvent.DELIVERED) }
 
         return shown
     }

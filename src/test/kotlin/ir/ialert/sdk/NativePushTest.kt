@@ -85,6 +85,8 @@ class NativePushTest {
 
         assertEquals(1, shown)
         assertEquals(listOf("n_4"), notifier.shown.map { it.id })
+        val acked = transport.requests.first { it.url.endsWith("/inbox/ack") }.body!!.getJSONArray("ids").let { ids -> List(ids.length()) { ids.getString(it) } }
+        assertTrue("n_5" !in acked, "pushed entries stay unacknowledged")
         assertTrue(blocking { ialert.backgroundSync(RecordingNotifier()) } == 0)
     }
 

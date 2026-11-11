@@ -94,6 +94,19 @@ IAlert.shared?.onMessage { message ->
 
 `respondToAuthRequest` returns the recorded status (`approved`, `denied`, `pending`, `expired`). With number matching a wrong number denies.
 
+### If the build reports a manifest merger conflict
+
+The SDK sets `com.google.firebase.messaging.default_notification_channel_id` to `ialert_default`. If your app (or another library) sets it too, keep yours by adding `tools:replace` to your own entry:
+
+```xml
+<manifest xmlns:tools="http://schemas.android.com/tools" …>
+    <application …>
+        <meta-data
+            android:name="com.google.firebase.messaging.default_notification_channel_id"
+            android:value="your_channel"
+            tools:replace="android:value" />
+```
+
 ## Manual setup
 
 For full control, skip `IAlert.start` and drive an instance yourself:

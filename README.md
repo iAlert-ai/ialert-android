@@ -21,7 +21,7 @@ dependencyResolutionManagement {
 Then the dependency in your app module:
 
 ```kotlin
-implementation("com.github.iAlert-ai:ialert-android:v0.5.0")
+implementation("com.github.iAlert-ai:ialert-android:v0.5.1")
 ```
 
 ## Quick start

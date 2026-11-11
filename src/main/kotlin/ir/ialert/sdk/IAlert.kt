@@ -405,7 +405,7 @@ public class IAlert(private val config: Config) {
         @JvmStatic
         public fun handleFcmToken(context: Context, token: String): Unit = AutoSetup.onNewToken(context, token)
 
-        public const val SDK_VERSION: String = "0.5.0"
+        public const val SDK_VERSION: String = "0.5.1"
         private const val SEEN_LIMIT = 500
         private val TAG_KEY = Regex("^[A-Za-z0-9_.:-]{1,64}$")
 

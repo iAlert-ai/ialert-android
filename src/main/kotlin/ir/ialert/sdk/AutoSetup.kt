@@ -29,8 +29,8 @@ import kotlin.coroutines.startCoroutine
 import kotlin.coroutines.suspendCoroutine
 
 /**
- * What [IAlert.start] sets up: FCM (the app's own Firebase project or iAlert's shared one,
- * from `GET /v1/push-config`), notification channels, display of iAlert messages, taps,
+ * What [IAlert.start] sets up: FCM (the app's own Firebase project, its client from
+ * `GET /v1/push-config`), notification channels, display of iAlert messages, taps,
  * the Gateway while the app is visible and a WorkManager sync every 15 minutes.
  */
 internal object AutoSetup {
@@ -112,8 +112,24 @@ internal object AutoSetup {
     suspend fun hostToken(context: Context, publicKey: String, apiUrl: String): String? {
         saveHost(context, publicKey, apiUrl, null, null)
         val ialert = restore(context) ?: return null
+        return currentToken(context.applicationContext, ialert)
+    }
+
+    /**
+     * The FCM token to register with. The cached one only stands in while push-config cannot be
+     * read (offline) or FCM fails; when the app has no FCM credential any more, none is used.
+     */
+    private suspend fun currentToken(context: Context, ialert: IAlert): String? {
         val prefs = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
-        val token = runCatching { fcmToken(context.applicationContext, ialert.pushConfig()) }.getOrNull() ?: return prefs.getString(KEY_FCM_TOKEN, null)
+        val cached = prefs.getString(KEY_FCM_TOKEN, null)
+        val config = runCatching { ialert.pushConfig(context.packageName) }.getOrNull() ?: return cached
+
+        if (config.fcmSource != "app") {
+            prefs.edit().remove(KEY_FCM_TOKEN).apply()
+            return null
+        }
+
+        val token = runCatching { fcmToken(context, config) }.getOrNull() ?: return cached
         prefs.edit().putString(KEY_FCM_TOKEN, token).apply()
         return token
     }
@@ -209,10 +225,8 @@ internal object AutoSetup {
 
         launch {
             try {
-                val token = runCatching { fcmToken(context, ialert.pushConfig()) }.getOrNull()
-                    ?: context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).getString(KEY_FCM_TOKEN, null)
+                val token = currentToken(context, ialert)
                 ialert.register(pushToken = token, fields = synchronized(this) { fields })
-                token?.let { context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit().putString(KEY_FCM_TOKEN, it).apply() }
                 synchronized(this) { registered = true }
                 if (synchronized(this) { visibleActivities > 0 }) runCatching { ialert.connect() }
             } catch (_: Exception) {
@@ -223,23 +237,26 @@ internal object AutoSetup {
         }
     }
 
-    private suspend fun fcmToken(context: Context, config: PushConfig): String? = when (config.fcmSource) {
-        "shared" -> config.fcmClient?.let { client ->
-            val app = FirebaseApp.getApps(context).firstOrNull { it.name == FIREBASE_APP_NAME } ?: FirebaseApp.initializeApp(
-                context,
-                FirebaseOptions.Builder()
-                    .setProjectId(client.projectId)
-                    .setApplicationId(client.applicationId)
-                    .setApiKey(client.apiKey)
-                    .setGcmSenderId(client.senderId)
-                    .build(),
-                FIREBASE_APP_NAME,
-            )
-            app.get(FirebaseMessaging::class.java).token.await()
-        }
-        // The app's own project, from its google-services.json.
-        "app" -> if (FirebaseApp.getApps(context).any { it.name == FirebaseApp.DEFAULT_APP_NAME }) FirebaseMessaging.getInstance().token.await() else null
-        else -> null
+    /**
+     * An FCM token of the app's own Firebase project: with the client iAlert holds (from the
+     * uploaded google-services.json), else the app's default FirebaseApp if it sets one up itself.
+     * Null without an FCM credential in the panel: then Gateway and Inbox only.
+     */
+    private suspend fun fcmToken(context: Context, config: PushConfig): String? {
+        val client = config.fcmClient
+            ?: return if (FirebaseApp.getApps(context).any { it.name == FirebaseApp.DEFAULT_APP_NAME }) FirebaseMessaging.getInstance().token.await() else null
+
+        val app = FirebaseApp.getApps(context).firstOrNull { it.name == FIREBASE_APP_NAME } ?: FirebaseApp.initializeApp(
+            context,
+            FirebaseOptions.Builder()
+                .setProjectId(client.projectId)
+                .setApplicationId(client.applicationId)
+                .setApiKey(client.apiKey)
+                .setGcmSenderId(client.senderId)
+                .build(),
+            FIREBASE_APP_NAME,
+        )
+        return app.get(FirebaseMessaging::class.java).token.await()
     }
 
     private fun scheduleSync(context: Context) {

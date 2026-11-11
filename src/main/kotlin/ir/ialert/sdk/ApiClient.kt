@@ -69,9 +69,10 @@ internal class ApiClient(baseUrl: String, private val publicKey: String, private
         return result.optJSONObject("data")?.optStringOrNull("status") ?: "pending"
     }
 
-    /** `GET /push-config`: how native push is set up for this app. */
-    suspend fun pushConfig(): PushConfig {
-        val data = request("GET", "/push-config", null).optJSONObject("data") ?: JSONObject()
+    /** `GET /push-config`: how native push is set up for this app, with the Firebase client of [packageName]. */
+    suspend fun pushConfig(packageName: String?): PushConfig {
+        val path = if (packageName == null) "/push-config" else "/push-config?package=${escape(packageName)}"
+        val data = request("GET", path, null).optJSONObject("data") ?: JSONObject()
         val fcm = data.optJSONObject("fcm")
         val client = fcm?.optJSONObject("client")
         return PushConfig(

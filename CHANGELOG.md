@@ -2,7 +2,7 @@
 
 ## 0.5.0
 
-- Now an Android library (AAR) with FCM built in. `IAlert.start(context, publicKey)`: one-line setup with no Firebase files or `FirebaseMessagingService`; it uses iAlert's shared Firebase project unless the app uploaded its own service account (`GET /v1/push-config`).
+- Now an Android library (AAR) with FCM built in. `IAlert.start(context, publicKey)`: one-line setup with no Firebase files or `FirebaseMessagingService` in the app; FCM uses the app's own Firebase project, whose service account and `google-services.json` are uploaded in the iAlert panel (`GET /v1/push-config?package=…`). Without them: Gateway, Inbox and background sync.
 - Notifications: shown for FCM and Gateway messages with image, tagged with the iAlert id (never twice); taps open the app or `data.url` and are acked clicked; permission asked on Android 13+.
 - Custom sounds: channels `ialert_default`, `ialert_silent` and `ialert_sound_<name>` for sounds in `res/raw`; `IAlertMessage.sound`.
 - Outages: WorkManager sync every 15 minutes shows undelivered Inbox messages that no push service took (`backgroundSync`, using the Inbox `pushed` flag); the Gateway is open while the app is visible.

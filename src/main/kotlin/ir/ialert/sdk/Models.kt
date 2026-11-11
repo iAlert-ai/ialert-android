@@ -60,9 +60,9 @@ public fun interface Subscription {
 }
 
 /**
- * How the app gets native push (`GET /v1/push-config`). [fcmSource] is `app` (the app's own
- * Firebase project, from its `google-services.json`), `shared` (iAlert's project, [fcmClient])
- * or null (Gateway and Inbox only).
+ * How the app gets native push (`GET /v1/push-config`). [fcmSource] is `app` when the app's
+ * FCM credential is in the iAlert panel ([fcmClient] is its Firebase client from the uploaded
+ * `google-services.json`), or null (Gateway and Inbox only).
  */
 public data class PushConfig(val fcmSource: String?, val fcmClient: FcmClient?) {
     public data class FcmClient(val projectId: String, val applicationId: String, val apiKey: String, val senderId: String)

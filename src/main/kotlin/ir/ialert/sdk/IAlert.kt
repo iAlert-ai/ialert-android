@@ -283,8 +283,8 @@ public class IAlert(private val config: Config) {
         }
     }
 
-    /** How native push is set up for this app (`GET /v1/push-config`). */
-    public suspend fun pushConfig(): PushConfig = api.pushConfig()
+    /** How native push is set up for this app (`GET /v1/push-config`), with the Firebase client of [packageName]. */
+    public suspend fun pushConfig(packageName: String? = null): PushConfig = api.pushConfig(packageName)
 
     /** Dedupe by notification id across Gateway, Inbox and restarts. */
     private fun receive(message: IAlertMessage, ack: Boolean = true): Boolean {
@@ -355,8 +355,8 @@ public class IAlert(private val config: Config) {
     public companion object {
         /**
          * One-line setup, in `Application.onCreate()`: registers the device, gets an FCM token
-         * (iAlert's shared Firebase project unless the app uploaded its own service account, so
-         * no `google-services.json` is needed), shows iAlert notifications, acks taps and opens
+         * from the app's own Firebase project (its service account and `google-services.json`
+         * uploaded in the iAlert panel; nothing in the app), shows iAlert notifications, acks taps and opens
          * `data.url`, keeps the Gateway open while the app is visible and syncs the Inbox every
          * 15 minutes in the background. Asks for the notification permission on Android 13+
          * the first time an activity shows, unless [requestPermission] is false.

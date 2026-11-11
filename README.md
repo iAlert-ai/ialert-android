@@ -2,7 +2,7 @@
 
 iAlert SDK for Android (Kotlin, Android library, minSdk 23). Install it and add one line: the SDK registers the device, gets an FCM token, shows notifications and keeps working when FCM is unreachable, through iAlert's own channel: a WebSocket to the iAlert Gateway while the app is visible, the device Inbox, and a background sync every 15 minutes. Each notification reaches the user once, across all channels and restarts.
 
-No `google-services.json`, Firebase setup or `FirebaseMessagingService` is needed: unless you uploaded your own FCM service account in the panel, the SDK uses iAlert's shared Firebase project (`GET /v1/push-config`).
+For Android's official push (FCM), upload your Firebase project's **service account JSON** and its **`google-services.json`** in the iAlert panel (app → APNs / FCM / Web). The SDK reads the Firebase client from iAlert (`GET /v1/push-config`), so the app itself needs no `google-services.json`, Firebase plugin or `FirebaseMessagingService`. Without an FCM credential, devices still get every message over the iAlert Gateway and Inbox, and through the background sync.
 
 ## Install
 
@@ -39,7 +39,7 @@ IAlert.login("user-42")   // after sign-in; IAlert.login(null) on sign-out
 
 `IAlert.start` does all of this:
 
-- Registers the device (`platform: android`) with its FCM token, and again when FCM rotates it.
+- Registers the device (`platform: android`) with its FCM token (when the app's FCM credential is in the panel), and again when FCM rotates it.
 - Asks for the notification permission on Android 13+ the first time an activity shows (`requestPermission = false` to ask yourself).
 - Shows iAlert messages from FCM and the Gateway as notifications, with their image, and acks them as delivered. A tap opens the app, or `data.url` when the message has one, and is acked as clicked.
 - Keeps the Gateway socket open while an activity is visible and catches up on the Inbox after each connect.

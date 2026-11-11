@@ -124,15 +124,15 @@ class NativePushTest {
     }
 
     @Test
-    fun `push config reads the shared firebase client`() {
+    fun `push config asks for the app's firebase client by package`() {
         val client = JSONObject().put("project_id", "p").put("application_id", "1:2:android:3").put("api_key", "k").put("sender_id", "2")
         val transport = FakeTransport({ request ->
-            if (request.url.endsWith("/push-config")) 200 to JSONObject().put("data", JSONObject().put("fcm", JSONObject().put("source", "shared").put("client", client))) else null
+            if (request.url.endsWith("/push-config?package=ir.example.app")) 200 to JSONObject().put("data", JSONObject().put("fcm", JSONObject().put("source", "app").put("client", client))) else null
         })
 
-        val config = blocking { sdk(transport).pushConfig() }
+        val config = blocking { sdk(transport).pushConfig("ir.example.app") }
 
-        assertEquals("shared", config.fcmSource)
+        assertEquals("app", config.fcmSource)
         assertEquals(PushConfig.FcmClient("p", "1:2:android:3", "k", "2"), config.fcmClient)
     }
 }

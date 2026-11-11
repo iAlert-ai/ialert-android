@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="ialert_channel_default">Notifications</string>
+    <string name="ialert_channel_silent">Silent notifications</string>
+    <string name="ialert_channel_sound">Notifications (%1$s)</string>
+</resources>

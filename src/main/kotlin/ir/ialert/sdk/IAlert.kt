@@ -1,5 +1,7 @@
 package ir.ialert.sdk
 
+import android.content.Context
+import com.google.firebase.messaging.RemoteMessage
 import org.json.JSONArray
 import org.json.JSONObject
 import java.util.Locale
@@ -18,6 +20,7 @@ import kotlin.coroutines.startCoroutine
  * hands each notification to listeners exactly once.
  *
  * Listeners run on a background thread; post to the main thread to touch UI.
+ * Most apps only need [IAlert.start]; the constructor is for full manual control.
  */
 public class IAlert(private val config: Config) {
     public constructor(publicKey: String, storage: KeyValueStorage) : this(Config(publicKey, storage))
@@ -219,6 +222,70 @@ public class IAlert(private val config: Config) {
         return Subscription { stateListeners -= listener }
     }
 
+    /**
+     * Hand an iAlert FCM message to the SDK (from your own `FirebaseMessagingService`; the
+     * built-in one does this for you). Listeners get it once, deduplicated against the
+     * Gateway and Inbox, and it is acked as delivered. Returns the message, or null when it
+     * is not an iAlert message or was already handed over.
+     */
+    public fun didReceivePush(data: Map<String, String>, title: String? = null, body: String? = null, image: String? = null): IAlertMessage? {
+        val message = messageFromPush(data, title, body, image) ?: return null
+        return if (receive(message)) message else null
+    }
+
+    /** Report a tap on an iAlert notification (its data, e.g. the launch intent extras). */
+    public suspend fun didOpenPush(data: Map<String, String>) {
+        val message = messageFromPush(data) ?: return
+        receive(message)
+        runCatching { ack(listOf(message.id), AckEvent.CLICKED) }
+    }
+
+    /**
+     * Pull Inbox messages that no channel delivered yet and show them with [notifier],
+     * skipping those FCM already took (`pushed`) or that are in the notification tray. This is how messages reach a closed
+     * app while FCM is unreachable (the built-in WorkManager job runs it every 15 minutes).
+     * Returns how many notifications were shown.
+     */
+    public suspend fun backgroundSync(notifier: LocalNotifier): Int {
+        val registration = requireRegistration()
+        val entries = withToken { api.inbox(registration.deviceId, registration.deviceToken) }
+        val alreadyShown = runCatching { notifier.shownNotificationIds() }.getOrDefault(emptySet())
+        var shown = 0
+
+        for (entry in entries.asReversed()) {
+            if (entry.deliveredAt != null) continue
+            val message = fromInbox(entry)
+
+            // Already handed over (Gateway, FCM while open, an earlier sync): never shown twice.
+            if (!receive(message, ack = false)) continue
+
+            // FCM already showed pushed entries, even if the user has dismissed them since.
+            if (!entry.pushed && message.id !in alreadyShown && (message.title != null || message.body != null)) {
+                notifier.show(message)
+                shown++
+            }
+        }
+
+        runCatching { ack(entries.filter { it.deliveredAt == null }.map { it.id }, AckEvent.DELIVERED) }
+
+        return shown
+    }
+
+    /**
+     * Approve or deny an Auth Push sign-in request (see [AuthRequestInfo.from]). With number
+     * matching pass the number the user typed; a wrong one denies. Returns the recorded
+     * status: `approved`, `denied`, `pending` or `expired`.
+     */
+    public suspend fun respondToAuthRequest(requestId: String, approve: Boolean, code: String? = null): String {
+        val registration = requireRegistration()
+        return withToken(forgetOnNotFound = false) {
+            api.respondToAuthRequest(registration.deviceId, registration.deviceToken, requestId, approve, code)
+        }
+    }
+
+    /** How native push is set up for this app (`GET /v1/push-config`). */
+    public suspend fun pushConfig(): PushConfig = api.pushConfig()
+
     /** Dedupe by notification id across Gateway, Inbox and restarts. */
     private fun receive(message: IAlertMessage, ack: Boolean = true): Boolean {
         synchronized(lock) {
@@ -286,7 +353,55 @@ public class IAlert(private val config: Config) {
     }
 
     public companion object {
-        public const val SDK_VERSION: String = "0.2.0"
+        /**
+         * One-line setup, in `Application.onCreate()`: registers the device, gets an FCM token
+         * (iAlert's shared Firebase project unless the app uploaded its own service account, so
+         * no `google-services.json` is needed), shows iAlert notifications, acks taps and opens
+         * `data.url`, keeps the Gateway open while the app is visible and syncs the Inbox every
+         * 15 minutes in the background. Asks for the notification permission on Android 13+
+         * the first time an activity shows, unless [requestPermission] is false.
+         */
+        @JvmStatic
+        @JvmOverloads
+        public fun start(context: Context, publicKey: String, fields: DeviceFields = DeviceFields(), requestPermission: Boolean = true): IAlert =
+            AutoSetup.start(context, publicKey, fields, requestPermission)
+
+        /** The instance [start] created, or null before it. */
+        @JvmStatic
+        public val shared: IAlert? get() = AutoSetup.instance
+
+        /** Set (or with null, clear) the external user id of this device, now or once registered. */
+        @JvmStatic
+        public fun login(externalUserId: String?): Unit = AutoSetup.login(externalUserId)
+
+        /** Live Activity broadcasts received by the built-in FCM service. Without a listener the SDK shows each channel as an ongoing notification. */
+        @JvmStatic
+        public fun onLiveActivityUpdate(listener: LiveActivityListener): Subscription {
+            AutoSetup.liveActivityListeners += listener
+            return Subscription { AutoSetup.liveActivityListeners -= listener }
+        }
+
+        /** For apps with their own `FirebaseMessagingService`: pass `onMessageReceived` here. Returns true for iAlert messages. */
+        @JvmStatic
+        public fun handleFcmMessage(context: Context, message: RemoteMessage): Boolean {
+            LiveActivityUpdate.from(message.data)?.let { update ->
+                val listeners = AutoSetup.liveActivityListeners
+                if (listeners.isEmpty()) AndroidNotifier(context).showLiveActivity(update) else listeners.forEach { it.onUpdate(update) }
+                return true
+            }
+            if (message.data["ialert_id"] == null) return false
+            val ialert = AutoSetup.restore(context) ?: return true
+            val notification = message.notification
+            val received = ialert.didReceivePush(message.data, notification?.title, notification?.body, notification?.imageUrl?.toString())
+            if (received != null) AutoSetup.bridge?.onPush(message.data, received.title, received.body)
+            return true
+        }
+
+        /** For apps with their own `FirebaseMessagingService`: pass `onNewToken` here. */
+        @JvmStatic
+        public fun handleFcmToken(context: Context, token: String): Unit = AutoSetup.onNewToken(context, token)
+
+        public const val SDK_VERSION: String = "0.5.0"
         private const val SEEN_LIMIT = 500
         private val TAG_KEY = Regex("^[A-Za-z0-9_.:-]{1,64}$")
 
@@ -320,6 +435,7 @@ public class IAlert(private val config: Config) {
             collapseId = message.optStringOrNull("collapse_id"),
             createdAt = message.optStringOrNull("created_at"),
             source = IAlertMessage.Source.GATEWAY,
+            sound = message.optStringOrNull("sound"),
         )
 
         private fun fromInbox(entry: InboxEntry) = IAlertMessage(
@@ -331,7 +447,33 @@ public class IAlert(private val config: Config) {
             collapseId = entry.collapseId,
             createdAt = entry.createdAt,
             source = IAlertMessage.Source.INBOX,
+            sound = entry.sound,
         )
+
+        /**
+         * An iAlert FCM message: `RemoteMessage.data` (with `ialert_id`) plus the
+         * notification title/body/image when FCM carried them. Null for other messages.
+         */
+        @JvmStatic
+        public fun messageFromPush(data: Map<String, String>, title: String? = null, body: String? = null, image: String? = null): IAlertMessage? {
+            val id = data["ialert_id"]?.takeIf { it.isNotBlank() } ?: return null
+            val custom = JSONObject()
+            for ((key, value) in data) {
+                if (key != "ialert_id" && key != "ialert_sound" && !key.startsWith("google.") && !key.startsWith("gcm.")) custom.put(key, value)
+            }
+
+            return IAlertMessage(
+                id = id,
+                title = title,
+                body = body,
+                image = image,
+                data = custom,
+                collapseId = data["collapse_key"],
+                createdAt = null,
+                source = IAlertMessage.Source.PUSH,
+                sound = data["ialert_sound"],
+            )
+        }
 
         /** `android.os.Build.MODEL` / `Build.VERSION.RELEASE` by reflection, so the core also runs on a plain JVM. */
         private fun androidBuildField(name: String, version: Boolean = false): String? = runCatching {

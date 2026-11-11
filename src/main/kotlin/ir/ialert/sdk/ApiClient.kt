@@ -11,6 +11,9 @@ internal class InboxEntry(
     val image: String?,
     val data: JSONObject,
     val collapseId: String?,
+    val sound: String?,
+    /** APNs/FCM/Web Push already took it, so the system showed it. */
+    val pushed: Boolean,
     val deliveredAt: String?,
     val createdAt: String?,
 )
@@ -58,6 +61,32 @@ internal class ApiClient(baseUrl: String, private val publicKey: String, private
         request(if (subscribe) "POST" else "DELETE", "/devices/${escape(deviceId)}/live-activity-channels/${escape(channelId)}", null, deviceToken)
     }
 
+    /** Approve or deny an Auth Push request; returns the recorded status. */
+    suspend fun respondToAuthRequest(deviceId: String, deviceToken: String, requestId: String, approve: Boolean, code: String?): String {
+        val body = JSONObject().put("decision", if (approve) "approve" else "deny")
+        if (code != null) body.put("code", code)
+        val result = request("POST", "/devices/${escape(deviceId)}/auth-requests/${escape(requestId)}", body, deviceToken)
+        return result.optJSONObject("data")?.optStringOrNull("status") ?: "pending"
+    }
+
+    /** `GET /push-config`: how native push is set up for this app. */
+    suspend fun pushConfig(): PushConfig {
+        val data = request("GET", "/push-config", null).optJSONObject("data") ?: JSONObject()
+        val fcm = data.optJSONObject("fcm")
+        val client = fcm?.optJSONObject("client")
+        return PushConfig(
+            fcmSource = fcm?.optStringOrNull("source"),
+            fcmClient = client?.let {
+                PushConfig.FcmClient(
+                    projectId = it.optStringOrNull("project_id") ?: return@let null,
+                    applicationId = it.optStringOrNull("application_id") ?: return@let null,
+                    apiKey = it.optStringOrNull("api_key") ?: return@let null,
+                    senderId = it.optStringOrNull("sender_id") ?: return@let null,
+                )
+            },
+        )
+    }
+
     private suspend fun request(method: String, pathOrUrl: String, body: JSONObject?, deviceToken: String? = null): JSONObject {
         val headers = buildMap {
             put("Accept", "application/json")
@@ -102,6 +131,8 @@ internal class ApiClient(baseUrl: String, private val publicKey: String, private
             image = content.optStringOrNull("image"),
             data = content.optJSONObject("data") ?: JSONObject(),
             collapseId = json.optStringOrNull("collapse_id"),
+            sound = content.optStringOrNull("sound"),
+            pushed = json.optBoolean("pushed", false),
             deliveredAt = json.optStringOrNull("delivered_at"),
             createdAt = json.optStringOrNull("created_at"),
         )

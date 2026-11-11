@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="ialert_channel_default">اعلان‌ها</string>
+    <string name="ialert_channel_silent">اعلان‌های بی‌صدا</string>
+    <string name="ialert_channel_sound">اعلان‌ها (%1$s)</string>
+</resources>

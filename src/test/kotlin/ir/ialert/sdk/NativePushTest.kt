@@ -3,6 +3,7 @@ package ir.ialert.sdk
 import org.json.JSONObject
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
@@ -56,6 +57,17 @@ class NativePushTest {
 
         assertEquals(listOf("n_1"), received.map { it.id })
         eventually { transport.requests.any { it.url.endsWith("/inbox/ack") && it.body?.getString("event") == "delivered" } }
+    }
+
+    @Test
+    fun `the click url comes from ialert_url and falls back to data url`() {
+        val deepLink = assertNotNull(IAlert.messageFromPush(pushData + ("ialert_url" to "myshop://orders/7")))
+        val legacy = assertNotNull(IAlert.messageFromPush(pushData + ("url" to "https://shop.test/sale")))
+
+        assertEquals("myshop://orders/7", deepLink.url)
+        assertFalse(deepLink.data.has("ialert_url"))
+        assertEquals("https://shop.test/sale", legacy.url)
+        assertNull(IAlert.messageFromPush(pushData)!!.url)
     }
 
     @Test

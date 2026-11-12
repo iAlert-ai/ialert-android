@@ -81,6 +81,7 @@ public class IAlert(private val config: Config) {
         val body = body(fields)
             .put("platform", "android")
             .put("push_token", pushToken ?: installationId())
+            .put("installation_id", installationId())
             .put("sdk_version", SDK_VERSION)
         if (fields.locale == null) body.put("locale", Locale.getDefault().toLanguageTag())
         if (fields.timezone == null) body.put("timezone", TimeZone.getDefault().id)
@@ -385,6 +386,16 @@ public class IAlert(private val config: Config) {
             return Subscription { AutoSetup.liveActivityListeners -= listener }
         }
 
+        /**
+         * Route taps yourself (for example to a screen of a single-activity app). Called on the
+         * main thread with the notification's `url` (deep link or web link) and its data; return
+         * true when handled. Set it in `Application.onCreate()` so cold starts reach it too.
+         */
+        @JvmStatic
+        public fun onNotificationClick(handler: NotificationClickHandler?) {
+            AutoSetup.clickHandler = handler
+        }
+
         /** For apps with their own `FirebaseMessagingService`: pass `onMessageReceived` here. Returns true for iAlert messages. */
         @JvmStatic
         public fun handleFcmMessage(context: Context, message: RemoteMessage): Boolean {
@@ -405,7 +416,7 @@ public class IAlert(private val config: Config) {
         @JvmStatic
         public fun handleFcmToken(context: Context, token: String): Unit = AutoSetup.onNewToken(context, token)
 
-        public const val SDK_VERSION: String = "0.5.1"
+        public const val SDK_VERSION: String = "0.6.0"
         private const val SEEN_LIMIT = 500
         private val TAG_KEY = Regex("^[A-Za-z0-9_.:-]{1,64}$")
 
@@ -440,6 +451,7 @@ public class IAlert(private val config: Config) {
             createdAt = message.optStringOrNull("created_at"),
             source = IAlertMessage.Source.GATEWAY,
             sound = message.optStringOrNull("sound"),
+            url = clickUrl(message.optStringOrNull("url"), message.optJSONObject("data")),
         )
 
         private fun fromInbox(entry: InboxEntry) = IAlertMessage(
@@ -452,6 +464,7 @@ public class IAlert(private val config: Config) {
             createdAt = entry.createdAt,
             source = IAlertMessage.Source.INBOX,
             sound = entry.sound,
+            url = clickUrl(entry.url, entry.data),
         )
 
         /**
@@ -463,7 +476,7 @@ public class IAlert(private val config: Config) {
             val id = data["ialert_id"]?.takeIf { it.isNotBlank() } ?: return null
             val custom = JSONObject()
             for ((key, value) in data) {
-                if (key != "ialert_id" && key != "ialert_sound" && !key.startsWith("google.") && !key.startsWith("gcm.")) custom.put(key, value)
+                if (key != "ialert_id" && key != "ialert_sound" && key != "ialert_url" && !key.startsWith("google.") && !key.startsWith("gcm.")) custom.put(key, value)
             }
 
             return IAlertMessage(
@@ -476,8 +489,13 @@ public class IAlert(private val config: Config) {
                 createdAt = null,
                 source = IAlertMessage.Source.PUSH,
                 sound = data["ialert_sound"],
+                url = clickUrl(data["ialert_url"], custom),
             )
         }
+
+        /** The notification's `url`, or `data.url` of messages sent before that field existed. */
+        internal fun clickUrl(url: String?, data: JSONObject?): String? =
+            url?.takeIf { it.isNotBlank() } ?: data?.optStringOrNull("url")?.takeIf { it.isNotBlank() }
 
         /** `android.os.Build.MODEL` / `Build.VERSION.RELEASE` by reflection, so the core also runs on a plain JVM. */
         private fun androidBuildField(name: String, version: Boolean = false): String? = runCatching {

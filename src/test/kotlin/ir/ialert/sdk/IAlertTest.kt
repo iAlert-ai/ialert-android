@@ -151,7 +151,7 @@ class IAlertTest {
         assertTrue(Regex("^ia_android_[0-9a-f-]{36}$").matches(body.getString("push_token")))
         assertEquals("user-42", body.getString("external_user_id"))
         assertEquals("gold", body.getJSONObject("tags").getString("plan"))
-        assertEquals("0.5.1", body.getString("sdk_version"))
+        assertEquals("0.6.0", body.getString("sdk_version"))
         assertEquals(body.getString("push_token"), transport.requests[1].body!!.getString("push_token"))
     }
 
@@ -163,6 +163,7 @@ class IAlertTest {
         blocking { sdk(transport, storage, autoConnect = false).register(pushToken = "fcm-token-123456") }
 
         assertEquals("fcm-token-123456", transport.requests[0].body!!.getString("push_token"))
+        assertTrue(Regex("^ia_android_[0-9a-f-]{36}$").matches(transport.requests[0].body!!.getString("installation_id")))
         assertEquals("dev_1", sdk(transport, storage, autoConnect = false).deviceId)
     }
 

@@ -61,6 +61,9 @@ internal object AutoSetup {
     /** Set by [IAlertBridge.attach]: a wrapper (Flutter, React Native) owns registration and the Gateway. */
     @Volatile
     var bridge: IAlertBridge.Events? = null
+
+    @Volatile
+    var clickHandler: NotificationClickHandler? = null
     private var hostMode = false
     private var pendingOpen: Map<String, String>? = null
     private var resumedActivity: java.lang.ref.WeakReference<Activity>? = null
@@ -197,7 +200,11 @@ internal object AutoSetup {
         launch { runCatching { ialert.register(pushToken = token, fields = synchronized(this) { fields }) } }
     }
 
-    /** A tap on an iAlert notification (ours or one FCM showed): ack it and open `data.url`. Returns whether a URL was opened. */
+    /**
+     * A tap on an iAlert notification (ours or one FCM showed): ack it and open its `url`
+     * (`data.url` for older messages). A deep link opens inside this app; a web link opens the
+     * browser (or a verified App Link). Returns whether the app was brought up or a link opened.
+     */
     fun open(context: Context, extras: Bundle?): Boolean {
         val data = extras?.toStringMap() ?: return false
         if (data[AndroidNotifier.EXTRA_ID].isNullOrBlank()) return false
@@ -208,13 +215,40 @@ internal object AutoSetup {
             bridge?.onOpen(data)
         }
 
-        val url = data["url"]?.let(Uri::parse)
-        if (url != null && url.scheme != null) {
-            return runCatching { context.startActivity(Intent(Intent.ACTION_VIEW, url).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) }.isSuccess
+        val link = data[AndroidNotifier.EXTRA_URL]?.takeIf { it.isNotBlank() } ?: data["url"]?.takeIf { it.isNotBlank() }
+        val handler = clickHandler
+        if (handler != null && runCatching { handler.onClick(link, data) }.getOrDefault(false)) {
+            return false
         }
 
-        return false
+        val url = link?.let(Uri::parse)?.takeIf { it.scheme != null } ?: return false
+
+        return openLink(context, url)
     }
+
+    /**
+     * Web links go to whatever handles them (browser or a verified App Link). Other schemes are
+     * deep links: first resolved inside this app, otherwise the launcher activity gets the link
+     * as its intent data (and the `ialert_url` extra) to route it.
+     */
+    internal fun openLink(context: Context, url: Uri): Boolean {
+        val scheme = url.scheme?.lowercase() ?: return false
+        if (scheme in BLOCKED_SCHEMES) return false
+
+        val view = Intent(Intent.ACTION_VIEW, url).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        if (scheme == "http" || scheme == "https") {
+            return runCatching { context.startActivity(view) }.isSuccess
+        }
+
+        if (runCatching { context.startActivity(Intent(view).setPackage(context.packageName)) }.isSuccess) return true
+
+        val launch = context.packageManager.getLaunchIntentForPackage(context.packageName) ?: return false
+        return runCatching {
+            context.startActivity(launch.setData(url).putExtra(AndroidNotifier.EXTRA_URL, url.toString()).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+        }.isSuccess
+    }
+
+    private val BLOCKED_SCHEMES = setOf("javascript", "file", "content", "data", "intent")
 
     private fun register(context: Context) {
         val ialert = instance ?: return

@@ -21,7 +21,7 @@ dependencyResolutionManagement {
 Then the dependency in your app module:
 
 ```kotlin
-implementation("com.github.iAlert-ai:ialert-android:v0.5.1")
+implementation("com.github.iAlert-ai:ialert-android:v0.6.0")
 ```
 
 ## Quick start
@@ -41,7 +41,7 @@ IAlert.login("user-42")   // after sign-in; IAlert.login(null) on sign-out
 
 - Registers the device (`platform: android`) with its FCM token (when the app's FCM credential is in the panel), and again when FCM rotates it.
 - Asks for the notification permission on Android 13+ the first time an activity shows (`requestPermission = false` to ask yourself).
-- Shows iAlert messages from FCM and the Gateway as notifications, with their image, and acks them as delivered. A tap opens the app, or `data.url` when the message has one, and is acked as clicked.
+- Shows iAlert messages from FCM and the Gateway as notifications, with their image, and acks them as delivered. A tap opens the app, or the message's `url` (a website or a deep link into your app, see below), and is acked as clicked.
 - Keeps the Gateway socket open while an activity is visible and catches up on the Inbox after each connect.
 - Every 15 minutes (WorkManager, with network) shows Inbox messages that no channel delivered, skipping those already in the tray: this is how messages arrive while FCM is blocked.
 
@@ -106,6 +106,38 @@ The SDK sets `com.google.firebase.messaging.default_notification_channel_id` to 
             android:value="your_channel"
             tools:replace="android:value" />
 ```
+
+## Notification links and deep links
+
+Send a notification with `url` (API field or the panel's "Link on click"). On tap the SDK acks
+the click and opens it:
+
+- `https://…` opens the browser, or your app if it is a verified App Link.
+- Any other scheme is a deep link (`myapp://orders/42`). It opens inside your app: the activity
+  with a matching intent filter, otherwise your launcher activity with the link as `intent.data`
+  (and the `ialert_url` extra).
+
+```xml
+<activity android:name=".OrderActivity" android:exported="true">
+    <intent-filter>
+        <action android:name="android.intent.action.VIEW" />
+        <category android:name="android.intent.category.DEFAULT" />
+        <data android:scheme="myapp" android:host="orders" />
+    </intent-filter>
+</activity>
+```
+
+To route taps yourself (single-activity or Compose apps), set a handler in `Application.onCreate()`.
+Return true when you handled it; the SDK then only brings the app to the front:
+
+```kotlin
+IAlert.onNotificationClick { url, data ->
+    if (url?.startsWith("myapp://") == true) { Router.pending = url; true } else false
+}
+```
+
+`IAlertMessage.url` carries the link for messages you handle in `onMessage`. Messages sent with
+`data.url` before the `url` field existed still work the same way.
 
 ## Manual setup
 

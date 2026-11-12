@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.6.0
+
+- Notification links: the new `url` field (`ialert_url` in FCM data) opens on tap. Web links go to the browser or a verified App Link; deep links (`myapp://…`) open inside the app, or the launcher activity with the link as its data. `IAlert.onNotificationClick` lets the app route taps itself. `IAlertMessage.url`; `data.url` still works.
+- Registration sends a stable `installation_id`, so one install stays one device when it moves from the internal network to an FCM token (and duplicates are merged on the server).
+
 ## 0.5.1
 
 - Background sync leaves entries FCM already took (`pushed`) unacknowledged, so they are shown once the platform switches to its internal network during an outage.

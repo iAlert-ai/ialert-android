@@ -16,8 +16,23 @@ public data class IAlertMessage(
     val source: Source,
     /** Sound file name in `res/raw` (with or without extension), `default`, `none` (silent) or null (default). */
     val sound: String? = null,
+    /**
+     * Opened when the notification is tapped: a web link (`https://…`, opens the browser or a
+     * verified App Link) or a deep link with your app's scheme (`myapp://orders/42`, opens that
+     * screen of the app). Falls back to `data.url` for messages sent before the `url` field.
+     */
+    val url: String? = null,
 ) {
     public enum class Source { GATEWAY, INBOX, PUSH }
+}
+
+/**
+ * Called when the user taps an iAlert notification, before the SDK opens [url]. Return true
+ * when you routed the tap yourself (navigation in your app); the SDK then only brings the app
+ * to the front. Return false to let the SDK open the link.
+ */
+public fun interface NotificationClickHandler {
+    public fun onClick(url: String?, data: Map<String, String>): Boolean
 }
 
 /** Device as returned by the iAlert API; [raw] has every field. */
@@ -77,7 +92,7 @@ public data class AuthRequestInfo(
     val context: Map<String, String>,
 ) {
     public companion object {
-        private val RESERVED = setOf("ialert_type", "auth_request_id", "number_matching", "expires_at", "ialert_id", "ialert_sound")
+        private val RESERVED = setOf("ialert_type", "auth_request_id", "number_matching", "expires_at", "ialert_id", "ialert_sound", "ialert_url")
 
         /** The request a message carries, or null for other messages. */
         @JvmStatic

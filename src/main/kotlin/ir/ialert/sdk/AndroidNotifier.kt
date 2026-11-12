@@ -114,6 +114,7 @@ public class AndroidNotifier(context: Context) : LocalNotifier {
         val intent = Intent(context, IAlertOpenActivity::class.java)
             .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
             .putExtra(EXTRA_ID, message.id)
+        message.url?.let { intent.putExtra(EXTRA_URL, it) }
         for (key in message.data.keys()) {
             message.data.optStringOrNull(key)?.let { intent.putExtra(key, it) }
         }
@@ -192,6 +193,7 @@ public class AndroidNotifier(context: Context) : LocalNotifier {
         /** Optional `<meta-data>` naming a monochrome drawable for the small icon. */
         public const val ICON_META: String = "ir.ialert.sdk.notification_icon"
         internal const val EXTRA_ID = "ialert_id"
+        internal const val EXTRA_URL = "ialert_url"
         private const val LIVE_TAG_PREFIX = "ialert_live:"
         private const val NOTIFICATION_ID = 0x1A1E
 

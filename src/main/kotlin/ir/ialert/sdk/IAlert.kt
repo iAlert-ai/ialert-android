@@ -416,8 +416,11 @@ public class IAlert(private val config: Config) {
         @JvmStatic
         public fun handleFcmToken(context: Context, token: String): Unit = AutoSetup.onNewToken(context, token)
 
-        public const val SDK_VERSION: String = "0.6.0"
+        public const val SDK_VERSION: String = "0.7.0"
         private const val SEEN_LIMIT = 500
+
+        /** iAlert's own FCM data keys, not part of the message's custom data. */
+        private val PUSH_KEYS = setOf("ialert_id", "ialert_url", "ialert_sound", "ialert_title", "ialert_body", "ialert_image", "ialert_sender_id", "ialert_sender_name", "ialert_sender_avatar")
         private val TAG_KEY = Regex("^[A-Za-z0-9_.:-]{1,64}$")
 
         private fun body(fields: DeviceFields): JSONObject {
@@ -452,6 +455,7 @@ public class IAlert(private val config: Config) {
             source = IAlertMessage.Source.GATEWAY,
             sound = message.optStringOrNull("sound"),
             url = clickUrl(message.optStringOrNull("url"), message.optJSONObject("data")),
+            sender = Sender.fromJson(message.optJSONObject("sender")),
         )
 
         private fun fromInbox(entry: InboxEntry) = IAlertMessage(
@@ -465,6 +469,7 @@ public class IAlert(private val config: Config) {
             source = IAlertMessage.Source.INBOX,
             sound = entry.sound,
             url = clickUrl(entry.url, entry.data),
+            sender = entry.sender,
         )
 
         /**
@@ -476,20 +481,22 @@ public class IAlert(private val config: Config) {
             val id = data["ialert_id"]?.takeIf { it.isNotBlank() } ?: return null
             val custom = JSONObject()
             for ((key, value) in data) {
-                if (key != "ialert_id" && key != "ialert_sound" && key != "ialert_url" && !key.startsWith("google.") && !key.startsWith("gcm.")) custom.put(key, value)
+                if (key !in PUSH_KEYS && !key.startsWith("google.") && !key.startsWith("gcm.")) custom.put(key, value)
             }
 
             return IAlertMessage(
                 id = id,
-                title = title,
-                body = body,
-                image = image,
+                // Messages with a sender come as FCM data only, with the content in `ialert_*` keys.
+                title = title ?: data["ialert_title"],
+                body = body ?: data["ialert_body"],
+                image = image ?: data["ialert_image"],
                 data = custom,
                 collapseId = data["collapse_key"],
                 createdAt = null,
                 source = IAlertMessage.Source.PUSH,
                 sound = data["ialert_sound"],
                 url = clickUrl(data["ialert_url"], custom),
+                sender = Sender.fromPush(data),
             )
         }
 

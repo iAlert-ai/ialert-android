@@ -22,8 +22,31 @@ public data class IAlertMessage(
      * screen of the app). Falls back to `data.url` for messages sent before the `url` field.
      */
     val url: String? = null,
+    /**
+     * Who the message is from (a chat partner, a store, a support agent): the SDK then shows it
+     * as a conversation notification with the sender's photo and name in place of the app icon.
+     */
+    val sender: Sender? = null,
 ) {
     public enum class Source { GATEWAY, INBOX, PUSH }
+}
+
+/** The sender of a conversation notification: [id] groups one sender's messages, [avatar] is an HTTPS image. */
+public data class Sender(val id: String?, val name: String, val avatar: String?) {
+    /** The key of this sender's conversation (its shortcut and Person). */
+    public val key: String get() = id ?: name
+
+    internal companion object {
+        fun fromJson(json: JSONObject?): Sender? {
+            val name = json?.optStringOrNull("name")?.takeIf { it.isNotBlank() } ?: return null
+            return Sender(json.optStringOrNull("id"), name, json.optStringOrNull("avatar"))
+        }
+
+        fun fromPush(data: Map<String, String>): Sender? {
+            val name = data["ialert_sender_name"]?.takeIf { it.isNotBlank() } ?: return null
+            return Sender(data["ialert_sender_id"]?.takeIf { it.isNotBlank() }, name, data["ialert_sender_avatar"]?.takeIf { it.isNotBlank() })
+        }
+    }
 }
 
 /**

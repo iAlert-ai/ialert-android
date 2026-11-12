@@ -21,7 +21,7 @@ dependencyResolutionManagement {
 Then the dependency in your app module:
 
 ```kotlin
-implementation("com.github.iAlert-ai:ialert-android:v0.6.0")
+implementation("com.github.iAlert-ai:ialert-android:v0.7.0")
 ```
 
 ## Quick start
@@ -106,6 +106,18 @@ The SDK sets `com.google.firebase.messaging.default_notification_channel_id` to 
             android:value="your_channel"
             tools:replace="android:value" />
 ```
+
+## Conversation notifications (sender photo)
+
+Send a message with a `sender` and it is shown like a chat message: the sender's photo and name in place of the app icon (the app icon becomes a small badge).
+
+```json
+{ "title": "New message", "body": "Your order is ready", "sender": { "id": "chat-7", "name": "Sara", "avatar": "https://cdn.example.com/u/7.jpg" }, "target": { "type": "all" } }
+```
+
+`sender.name` is required, `avatar` is an HTTPS image (square, 192×192 or larger), `id` keeps one sender's messages together (the name when omitted). The panel has the same fields. `message.sender` carries it in code.
+
+**Android:** nothing to do. The SDK shows it with `MessagingStyle` and a long-lived conversation shortcut, so Android 11+ lists it under Conversations with the round photo; older versions show the photo as the large icon. These messages arrive as high-priority FCM data messages; after a Force stop (or on some aggressive battery savers) Android holds them back, and the background sync or the next launch shows them from the Inbox. The conversation shortcut opens your launcher activity with the `ialert_sender_id` extra (`AndroidNotifier.EXTRA_SENDER_ID`), so you can open that chat.
 
 ## Notification links and deep links
 

@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.7.0
+
+- Conversation notifications: a message with a `sender` (`IAlertMessage.sender`) is shown with `MessagingStyle`, the sender's round photo and a long-lived conversation shortcut (Conversations section on Android 11+). Such messages come as FCM data only, with the content in `ialert_*` keys.
+
 ## 0.6.0
 
 - Notification links: the new `url` field (`ialert_url` in FCM data) opens on tap. Web links go to the browser or a verified App Link; deep links (`myapp://…`) open inside the app, or the launcher activity with the link as its data. `IAlert.onNotificationClick` lets the app route taps itself. `IAlertMessage.url`; `data.url` still works.

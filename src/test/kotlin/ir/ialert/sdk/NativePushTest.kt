@@ -60,6 +60,23 @@ class NativePushTest {
     }
 
     @Test
+    fun `a data-only push with a sender carries the content and the sender`() {
+        val message = assertNotNull(IAlert.messageFromPush(pushData + mapOf(
+            "ialert_title" to "New message",
+            "ialert_body" to "Are you coming?",
+            "ialert_sender_id" to "chat-7",
+            "ialert_sender_name" to "Sara",
+            "ialert_sender_avatar" to "https://img.test/sara.png",
+        )))
+
+        assertEquals("New message", message.title)
+        assertEquals("Are you coming?", message.body)
+        assertEquals(Sender("chat-7", "Sara", "https://img.test/sara.png"), message.sender)
+        assertEquals(setOf("order"), message.data.keys().asSequence().toSet())
+        assertNull(IAlert.messageFromPush(pushData)!!.sender)
+    }
+
+    @Test
     fun `the click url comes from ialert_url and falls back to data url`() {
         val deepLink = assertNotNull(IAlert.messageFromPush(pushData + ("ialert_url" to "myshop://orders/7")))
         val legacy = assertNotNull(IAlert.messageFromPush(pushData + ("url" to "https://shop.test/sale")))

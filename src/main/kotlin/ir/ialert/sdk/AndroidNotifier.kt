@@ -9,11 +9,19 @@ import android.content.Intent
 import android.content.pm.PackageManager
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
+import android.graphics.Canvas
+import android.graphics.Paint
+import android.graphics.PorterDuff
+import android.graphics.PorterDuffXfermode
 import android.media.AudioAttributes
 import android.net.Uri
 import android.os.Build
 import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
+import androidx.core.app.Person
+import androidx.core.content.pm.ShortcutInfoCompat
+import androidx.core.content.pm.ShortcutManagerCompat
+import androidx.core.graphics.drawable.IconCompat
 import androidx.core.content.ContextCompat
 import okhttp3.OkHttpClient
 import okhttp3.Request
@@ -62,8 +70,13 @@ public class AndroidNotifier(context: Context) : LocalNotifier {
         if (message.sound == "none") builder.setSilent(true)
         soundUri(message.sound)?.let { builder.setSound(it) }
 
-        message.image?.let(::download)?.let { bitmap ->
-            builder.setLargeIcon(bitmap).setStyle(NotificationCompat.BigPictureStyle().bigPicture(bitmap).setSummaryText(message.body))
+        val sender = message.sender
+        if (sender != null) {
+            conversation(builder, message, sender)
+        } else {
+            message.image?.let(::download)?.let { bitmap ->
+                builder.setLargeIcon(bitmap).setStyle(NotificationCompat.BigPictureStyle().bigPicture(bitmap).setSummaryText(message.body))
+            }
         }
 
         try {
@@ -108,6 +121,62 @@ public class AndroidNotifier(context: Context) : LocalNotifier {
         } catch (_: SecurityException) {
             // Notifications not permitted.
         }
+    }
+
+    /**
+     * A conversation notification (Android 11+ shows it in the Conversations section with the
+     * sender's round photo): MessagingStyle with the sender as a Person, linked to a long-lived
+     * sharing shortcut for that sender. Older versions show the photo as the large icon.
+     */
+    private fun conversation(builder: NotificationCompat.Builder, message: IAlertMessage, sender: Sender) {
+        val avatar = sender.avatar?.let(::download)?.let(::circle)
+        val icon = avatar?.let { IconCompat.createWithBitmap(it) }
+        val person = Person.Builder()
+            .setName(sender.name)
+            .setKey(sender.key)
+            .setImportant(true)
+            .apply { icon?.let(::setIcon) }
+            .build()
+        val shortcutId = SHORTCUT_PREFIX + sender.key
+
+        val launch = context.packageManager.getLaunchIntentForPackage(context.packageName)
+            ?.setAction(Intent.ACTION_VIEW)
+            ?.putExtra(EXTRA_SENDER_ID, sender.key)
+        if (launch != null) {
+            val shortcut = ShortcutInfoCompat.Builder(context, shortcutId)
+                .setShortLabel(sender.name)
+                .setLongLived(true)
+                .setPerson(person)
+                .setIntent(launch)
+                .apply { icon?.let(::setIcon) }
+                .build()
+            runCatching { ShortcutManagerCompat.pushDynamicShortcut(context, shortcut) }
+            builder.setShortcutId(shortcutId)
+        }
+
+        val text = message.body ?: message.title ?: ""
+        val style = NotificationCompat.MessagingStyle(person)
+            .addMessage(NotificationCompat.MessagingStyle.Message(text, System.currentTimeMillis(), person))
+        if (message.title != null && message.body != null && message.title != sender.name) {
+            style.setConversationTitle(message.title).setGroupConversation(true)
+        }
+
+        builder.setStyle(style)
+            .setCategory(NotificationCompat.CATEGORY_MESSAGE)
+            .setContentTitle(sender.name)
+            .setContentText(text)
+        avatar?.let(builder::setLargeIcon)
+    }
+
+    private fun circle(source: Bitmap): Bitmap {
+        val size = minOf(source.width, source.height)
+        val output = Bitmap.createBitmap(size, size, Bitmap.Config.ARGB_8888)
+        val canvas = Canvas(output)
+        val paint = Paint(Paint.ANTI_ALIAS_FLAG)
+        canvas.drawCircle(size / 2f, size / 2f, size / 2f, paint)
+        paint.xfermode = PorterDuffXfermode(PorterDuff.Mode.SRC_IN)
+        canvas.drawBitmap(source, ((size - source.width) / 2f), ((size - source.height) / 2f), paint)
+        return output
     }
 
     private fun openIntent(message: IAlertMessage): PendingIntent {
@@ -194,6 +263,11 @@ public class AndroidNotifier(context: Context) : LocalNotifier {
         public const val ICON_META: String = "ir.ialert.sdk.notification_icon"
         internal const val EXTRA_ID = "ialert_id"
         internal const val EXTRA_URL = "ialert_url"
+
+        /** Extra on the conversation shortcut's launch intent: the sender's id (or name). */
+        public const val EXTRA_SENDER_ID: String = "ialert_sender_id"
+        private const val SHORTCUT_PREFIX = "ialert_sender_"
+
         private const val LIVE_TAG_PREFIX = "ialert_live:"
         private const val NOTIFICATION_ID = 0x1A1E
 

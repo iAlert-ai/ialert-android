@@ -24,8 +24,8 @@ internal class InboxEntry(
 internal class ApiClient(baseUrl: String, private val publicKey: String, private val transport: HttpTransport) {
     private val baseUrl = baseUrl.trimEnd('/')
 
-    suspend fun register(body: JSONObject): Pair<Device, String> {
-        val result = request("POST", "/devices", body)
+    suspend fun register(body: JSONObject, deviceToken: String? = null): Pair<Device, String> {
+        val result = request("POST", "/devices", body, deviceToken)
         return device(result.getJSONObject("data")) to result.getString("device_token")
     }
 

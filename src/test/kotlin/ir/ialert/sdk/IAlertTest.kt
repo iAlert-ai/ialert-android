@@ -153,6 +153,9 @@ class IAlertTest {
         assertEquals("gold", body.getJSONObject("tags").getString("plan"))
         assertEquals("0.7.0", body.getString("sdk_version"))
         assertEquals(body.getString("push_token"), transport.requests[1].body!!.getString("push_token"))
+        assertTrue(body.getBoolean("device_binding"))
+        assertEquals(null, first.headers["X-Device-Token"])
+        assertEquals("ia_dt_dev_1.sig", transport.requests[1].headers["X-Device-Token"])
     }
 
     @Test

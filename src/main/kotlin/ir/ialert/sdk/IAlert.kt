@@ -83,12 +83,14 @@ public class IAlert(private val config: Config) {
             .put("push_token", pushToken ?: installationId())
             .put("installation_id", installationId())
             .put("sdk_version", SDK_VERSION)
+            .put("device_binding", true)
         if (fields.locale == null) body.put("locale", Locale.getDefault().toLanguageTag())
         if (fields.timezone == null) body.put("timezone", TimeZone.getDefault().id)
         androidBuildField("MODEL")?.let { body.put("device_model", it) }
         androidBuildField("RELEASE", version = true)?.let { body.put("os_version", it) }
 
-        val (device, token) = api.register(body)
+        // Proves this install owns the device, so nobody else can re-register it.
+        val (device, token) = api.register(body, synchronized(lock) { registration?.deviceToken })
         synchronized(lock) {
             registration = Registration(device.id, token)
             write("registration", JSONObject().put("device_id", device.id).put("device_token", token).toString())

@@ -418,7 +418,7 @@ public class IAlert(private val config: Config) {
         @JvmStatic
         public fun handleFcmToken(context: Context, token: String): Unit = AutoSetup.onNewToken(context, token)
 
-        public const val SDK_VERSION: String = "0.7.0"
+        public const val SDK_VERSION: String = "0.8.0"
         private const val SEEN_LIMIT = 500
 
         /** iAlert's own FCM data keys, not part of the message's custom data. */

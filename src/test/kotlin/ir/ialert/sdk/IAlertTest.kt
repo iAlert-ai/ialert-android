@@ -151,7 +151,7 @@ class IAlertTest {
         assertTrue(Regex("^ia_android_[0-9a-f-]{36}$").matches(body.getString("push_token")))
         assertEquals("user-42", body.getString("external_user_id"))
         assertEquals("gold", body.getJSONObject("tags").getString("plan"))
-        assertEquals("0.7.0", body.getString("sdk_version"))
+        assertEquals("0.8.0", body.getString("sdk_version"))
         assertEquals(body.getString("push_token"), transport.requests[1].body!!.getString("push_token"))
         assertTrue(body.getBoolean("device_binding"))
         assertEquals(null, first.headers["X-Device-Token"])

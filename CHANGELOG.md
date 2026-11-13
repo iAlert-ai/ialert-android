@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.8.0
+
+- **Device binding:** every registration sends `device_binding: true` and the stored `X-Device-Token`, so only this install can re-register its device. Another install that learns the push token or installation id (or a reinstall) gets a new, empty device instead of taking this one over (needs iAlert server with device binding).
+
 ## 0.7.0
 
 - Conversation notifications: a message with a `sender` (`IAlertMessage.sender`) is shown with `MessagingStyle`, the sender's round photo and a long-lived conversation shortcut (Conversations section on Android 11+). Such messages come as FCM data only, with the content in `ialert_*` keys.
